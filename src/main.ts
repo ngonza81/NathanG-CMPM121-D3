@@ -5,32 +5,39 @@ import "./style.css";
 import "./_leafletWorkaround.ts";
 import luck from "./_luck.ts";
 
-// ---- UI setup -------------------------------------------------
+// ---- Constants & Config ----------------------------------------
+const MAP_ZOOM = 19;
+const CELL_SIZE_DEG = 0.0001;
+const INTERACTION_RADIUS_CELLS = 3;
+const FILL_OPACITY_EMPTY = 0.05;
+const FILL_OPACITY_FILLED = 0.12;
+
+const WORLD_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
+let playerPos = WORLD_ORIGIN.clone();
+
+// ---- State -----------------------------------------------------
+const gridState = {
+  visibleCells: [] as L.Rectangle[],
+  overrides: {} as Record<string, number>,
+  heldSpirit: null as number | null,
+};
+
+// ---- UI setup --------------------------------------------------
 const mapDiv = document.createElement("div");
 mapDiv.id = "map";
 document.body.append(mapDiv);
 
 const statusPanel = document.createElement("div");
 statusPanel.id = "statusPanel";
-statusPanel.textContent = "No spirit held.";
 document.body.append(statusPanel);
 
 const feedbackPanel = document.createElement("div");
 feedbackPanel.id = "feedbackPanel";
 document.body.append(feedbackPanel);
 
-// ---- Map setup ---------------------------------------------------
-
-// Dreamwalker starting point (classroom)
-const DREAM_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
-let playerPos = DREAM_ORIGIN.clone();
-
-const MAP_ZOOM = 19;
-const CELL_SIZE_DEG = 0.0001; // ~house sized
-const INTERACTION_RADIUS_CELLS = 3;
-
+// ---- Map setup -------------------------------------------------
 const map = L.map(mapDiv, {
-  center: DREAM_ORIGIN,
+  center: WORLD_ORIGIN,
   zoom: MAP_ZOOM,
   minZoom: MAP_ZOOM,
   maxZoom: MAP_ZOOM,
@@ -43,86 +50,123 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap contributors",
 }).addTo(map);
 
-// Player marker
-const playerMarker = L.circleMarker(DREAM_ORIGIN, {
+const playerMarker = L.circleMarker(playerPos, {
   radius: 7,
   color: "purple",
   fillOpacity: 0.8,
-}).addTo(map);
-playerMarker.bindTooltip("Dreamwalker");
+}).addTo(map).bindTooltip("Dreamwalker");
 
-// Added movement of position to test
-map.on("contextmenu", (e: L.LeafletMouseEvent) => {
-  e.originalEvent.preventDefault();
+// ---- Utility Functions -----------------------------------------
 
-  const newPos = e.latlng;
-  playerPos = newPos; // update player's position only
-  playerMarker.setLatLng(newPos);
-
-  feedbackPanel.textContent = `🧭 Moved Dreamwalker to (${
-    newPos.lat.toFixed(5)
-  }, ${newPos.lng.toFixed(5)}).`;
-
-  // redraw grid based on new player position
-  drawCells();
-});
-
-// ---- Player Inventory ----------------------------------------
-let heldSpirit: number | null = null;
-
-function updateStatusPanel() {
-  if (heldSpirit === null) {
-    statusPanel.textContent = "👐 Empty-handed.";
-  } else {
-    statusPanel.textContent = `✨ Holding spirit of value ${heldSpirit}.`;
-  }
+function latToCellIndex(lat: number) {
+  return Math.floor((lat - WORLD_ORIGIN.lat) / CELL_SIZE_DEG);
+}
+function lngToCellIndex(lng: number) {
+  return Math.floor((lng - WORLD_ORIGIN.lng) / CELL_SIZE_DEG);
+}
+function cellKey(i: number, j: number) {
+  return `${i},${j}`;
 }
 
-updateStatusPanel();
-
-// ---- Helper Functions ----------------------------------------
-
-// Convert a long/lat value to an integer cell index.
-function latToCellIndex(lat: number): number {
-  return Math.floor((lat - DREAM_ORIGIN.lat) / CELL_SIZE_DEG);
-}
-function lngToCellIndex(lng: number): number {
-  return Math.floor((lng - DREAM_ORIGIN.lng) / CELL_SIZE_DEG);
-}
-
-// Check if a cell (i, j) is close enough to interact with.
-function isCellNearPlayer(i: number, j: number): boolean {
-  const cellLat = DREAM_ORIGIN.lat + i * CELL_SIZE_DEG;
-  const cellLng = DREAM_ORIGIN.lng + j * CELL_SIZE_DEG;
-  const distLat = Math.abs(cellLat - playerPos.lat);
-  const distLng = Math.abs(cellLng - playerPos.lng);
-  return (
-    distLat <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG &&
-    distLng <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG
-  );
+function getCellLatLng(i: number, j: number) {
+  const south = WORLD_ORIGIN.lat + i * CELL_SIZE_DEG;
+  const west = WORLD_ORIGIN.lng + j * CELL_SIZE_DEG;
+  return {
+    south,
+    west,
+    north: south + CELL_SIZE_DEG,
+    east: west + CELL_SIZE_DEG,
+  };
 }
 
-// Grabs a spirit value: Returns 0 if empty, or a power-of-two-ish
-function getCellSpiritValue(i: number, j: number): number {
+function getSpiritValue(i: number, j: number): number {
   const r = luck(`${i},${j},spirit`);
-  if (r < 0.2) {
-    if (r < 0.07) return 4;
-    if (r < 0.14) return 2;
-    return 1;
-  }
+  if (r < 0.2) return r < 0.07 ? 4 : r < 0.14 ? 2 : 1;
   return 0;
 }
-// ---- Cell Drawing --------------------------------------------
 
-const visibleCells: L.Rectangle[] = [];
-const cellOverrides: Record<string, number> = {};
+function isCellNearPlayer(i: number, j: number): boolean {
+  const cellLat = WORLD_ORIGIN.lat + i * CELL_SIZE_DEG;
+  const cellLng = WORLD_ORIGIN.lng + j * CELL_SIZE_DEG;
+  const dLat = Math.abs(cellLat - playerPos.lat);
+  const dLng = Math.abs(cellLng - playerPos.lng);
+  return dLat <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG &&
+    dLng <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG;
+}
 
-function drawCells() {
-  // clear old
-  for (const cell of visibleCells) {
-    map.removeLayer(cell);
+function updateStatusPanel() {
+  statusPanel.textContent = gridState.heldSpirit
+    ? `✨ Holding spirit of value ${gridState.heldSpirit}.`
+    : "👐 Empty-handed.";
+}
+
+function updateCellAppearance(
+  rect: L.Rectangle,
+  value: number,
+  nearby: boolean,
+) {
+  rect.setStyle({
+    color: nearby ? "#ff66ff" : "#888",
+    fillOpacity: value > 0 ? FILL_OPACITY_FILLED : FILL_OPACITY_EMPTY,
+  });
+  rect.unbindTooltip();
+  if (value > 0) {
+    rect.bindTooltip(`✨ ${value}`, {
+      permanent: true,
+      direction: "center",
+      className: "cell-label",
+    });
   }
-  visibleCells.length = 0;
+}
+
+function handleCellClick(i: number, j: number, rect: L.Rectangle) {
+  if (!isCellNearPlayer(i, j)) {
+    feedbackPanel.textContent = `That fragment is too far away. Move closer.`;
+    return;
+  }
+
+  const key = cellKey(i, j);
+  const currentValue = key in gridState.overrides
+    ? gridState.overrides[key]
+    : getSpiritValue(i, j);
+
+  // --- PICKUP ---
+  if (currentValue > 0 && gridState.heldSpirit === null) {
+    gridState.heldSpirit = currentValue;
+    gridState.overrides[key] = 0;
+    updateStatusPanel();
+    updateCellAppearance(rect, 0, true);
+    feedbackPanel.textContent =
+      `💫 Picked up a spirit of value ${currentValue}.`;
+    return;
+  }
+
+  // --- MERGE ---
+  if (currentValue > 0 && gridState.heldSpirit === currentValue) {
+    const newValue = currentValue * 2;
+    gridState.overrides[key] = newValue;
+    gridState.heldSpirit = null;
+    updateStatusPanel();
+    updateCellAppearance(rect, newValue, true);
+    feedbackPanel.textContent = `⚡ Spirits merged! New value: ${newValue}.`;
+    return;
+  }
+
+  // --- INVALIDS ---
+  if (gridState.heldSpirit && currentValue === 0) {
+    feedbackPanel.textContent = "This fragment is empty.";
+  } else if (gridState.heldSpirit === null && currentValue === 0) {
+    feedbackPanel.textContent = "Empty dream fragment.";
+  } else {
+    feedbackPanel.textContent = "The spirits resist merging.";
+  }
+}
+
+// ---- Grid Rendering --------------------------------------------
+function drawCells() {
+  // Clear old cells
+  for (const cell of gridState.visibleCells) map.removeLayer(cell);
+  gridState.visibleCells.length = 0;
 
   const bounds = map.getBounds();
   const startI = latToCellIndex(bounds.getSouth());
@@ -132,107 +176,34 @@ function drawCells() {
 
   for (let i = startI; i <= endI; i++) {
     for (let j = startJ; j <= endJ; j++) {
-      const cellSouth = DREAM_ORIGIN.lat + i * CELL_SIZE_DEG;
-      const cellWest = DREAM_ORIGIN.lng + j * CELL_SIZE_DEG;
-      const cellNorth = cellSouth + CELL_SIZE_DEG;
-      const cellEast = cellWest + CELL_SIZE_DEG;
+      const { south, west, north, east } = getCellLatLng(i, j);
+      const key = cellKey(i, j);
+      const spiritValue = key in gridState.overrides
+        ? gridState.overrides[key]
+        : getSpiritValue(i, j);
 
-      const key = `${i},${j}`;
-      const spiritValue = (key in cellOverrides)
-        ? cellOverrides[key]
-        : getCellSpiritValue(i, j);
+      const rect = L.rectangle([[south, west], [north, east]], { weight: 0.5 });
+      const nearby = isCellNearPlayer(i, j);
+      updateCellAppearance(rect, spiritValue, nearby);
 
-      // Create rectangle
-      const rect = L.rectangle(
-        [
-          [cellSouth, cellWest],
-          [cellNorth, cellEast],
-        ],
-        {
-          weight: 0.5,
-          color: isCellNearPlayer(i, j) ? "#ff66ff" : "#888",
-          fillOpacity: spiritValue > 0 ? 0.12 : 0.05, // ✅ higher opacity for filled cells
-        },
-      );
-
-      // Display visible spirit tooltips
-      if (spiritValue > 0) {
-        rect.bindTooltip(`✨ ${spiritValue}`, {
-          permanent: true,
-          direction: "center",
-          className: "cell-label",
-        });
-      }
-
-      // Clicking the cell
-      rect.on("click", () => {
-        if (!isCellNearPlayer(i, j)) {
-          feedbackPanel.textContent =
-            `That fragment is too far away. Move closer. (cell ${i},${j})`;
-          return;
-        }
-
-        const currentValue = (key in cellOverrides)
-          ? cellOverrides[key]
-          : getCellSpiritValue(i, j);
-
-        // --- PICKUP LOGIC ---
-        if (currentValue > 0 && heldSpirit === null) {
-          heldSpirit = currentValue;
-          cellOverrides[key] = 0; // mark as empty
-          updateStatusPanel();
-
-          rect.unbindTooltip();
-          rect.setStyle({ fillOpacity: 0.03 });
-          feedbackPanel.textContent =
-            `💫 You picked up a spirit of value ${currentValue} from (${i}, ${j}).`;
-          return;
-        }
-
-        // --- MERGE LOGIC ---
-        if (currentValue > 0 && heldSpirit === currentValue) {
-          const newValue = currentValue * 2;
-          heldSpirit = null;
-          cellOverrides[key] = newValue;
-          updateStatusPanel();
-
-          rect.bindTooltip(`✨ ${newValue}`, {
-            permanent: true,
-            direction: "center",
-            className: "cell-label",
-          });
-          rect.setStyle({ fillOpacity: 0.12 });
-          feedbackPanel.textContent =
-            `⚡ Spirits merge into one of value ${newValue}!`;
-          return;
-        }
-
-        // --- INVALID ACTIONS ---
-        if (heldSpirit !== null && currentValue === 0) {
-          feedbackPanel.textContent =
-            `This fragment is empty. You can only merge with another spirit.`;
-          return;
-        }
-
-        if (currentValue === 0 && heldSpirit === null) {
-          feedbackPanel.textContent = `Empty dream fragment at (${i}, ${j}).`;
-          return;
-        }
-
-        if (
-          heldSpirit !== null && currentValue !== heldSpirit && currentValue > 0
-        ) {
-          feedbackPanel.textContent =
-            `The spirits resist merging — their energies are unequal.`;
-          return;
-        }
-      });
-
+      rect.on("click", () => handleCellClick(i, j, rect));
       rect.addTo(map);
-      visibleCells.push(rect);
+      gridState.visibleCells.push(rect);
     }
   }
 }
 
+// ---- Player Movement --------------------------------------------
+map.on("contextmenu", (e: L.LeafletMouseEvent) => {
+  e.originalEvent.preventDefault();
+  playerPos = e.latlng;
+  playerMarker.setLatLng(playerPos);
+  feedbackPanel.textContent = `🧭 Dreamwalker moved to (${
+    playerPos.lat.toFixed(5)
+  }, ${playerPos.lng.toFixed(5)}).`;
+  drawCells();
+});
+
 map.on("moveend", drawCells);
 drawCells();
+updateStatusPanel();
