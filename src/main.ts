@@ -1,115 +1,92 @@
 // @deno-types="npm:@types/leaflet"
-import leaflet from "leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import "./style.css";
+import "./_leafletWorkaround.ts";
+//import luck from "./_luck.ts";
 
-// Style sheets
-import "leaflet/dist/leaflet.css"; // supporting style for Leaflet
-import "./style.css"; // student-controlled page style
-
-// Fix missing marker images
-import "./_leafletWorkaround.ts"; // fixes for missing Leaflet images
-
-// Import our luck function
-import luck from "./_luck.ts";
-
-// Create basic UI elements
-
-const controlPanelDiv = document.createElement("div");
-controlPanelDiv.id = "controlPanel";
-document.body.append(controlPanelDiv);
-
+// ---- UI skeleton -------------------------------------------------
 const mapDiv = document.createElement("div");
 mapDiv.id = "map";
 document.body.append(mapDiv);
 
-const statusPanelDiv = document.createElement("div");
-statusPanelDiv.id = "statusPanel";
-document.body.append(statusPanelDiv);
+const statusPanel = document.createElement("div");
+statusPanel.id = "statusPanel";
+statusPanel.textContent = "No spirit held.";
+document.body.append(statusPanel);
 
-// Our classroom location
-const CLASSROOM_LATLNG = leaflet.latLng(
-  36.997936938057016,
-  -122.05703507501151,
-);
+// ---- Map setup ---------------------------------------------------
 
-// Tunable gameplay parameters
-const GAMEPLAY_ZOOM_LEVEL = 19;
-const TILE_DEGREES = 1e-4;
-const NEIGHBORHOOD_SIZE = 8;
-const CACHE_SPAWN_PROBABILITY = 0.1;
+// Dreamwalker starting point (classroom)
+const DREAM_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
 
-// Create the map (element with id "map" is defined in index.html)
-const map = leaflet.map(mapDiv, {
-  center: CLASSROOM_LATLNG,
-  zoom: GAMEPLAY_ZOOM_LEVEL,
-  minZoom: GAMEPLAY_ZOOM_LEVEL,
-  maxZoom: GAMEPLAY_ZOOM_LEVEL,
+const MAP_ZOOM = 19;
+
+const map = L.map(mapDiv, {
+  center: DREAM_ORIGIN,
+  zoom: MAP_ZOOM,
+  minZoom: MAP_ZOOM,
+  maxZoom: MAP_ZOOM,
   zoomControl: false,
   scrollWheelZoom: false,
 });
 
-// Populate the map with a background tile layer
-leaflet
-  .tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution:
-      '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  })
-  .addTo(map);
+L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  attribution: "© OpenStreetMap contributors",
+}).addTo(map);
 
-// Add a marker to represent the player
-const playerMarker = leaflet.marker(CLASSROOM_LATLNG);
-playerMarker.bindTooltip("That's you!");
-playerMarker.addTo(map);
+// Player marker
+const playerMarker = L.circleMarker(DREAM_ORIGIN, {
+  radius: 7,
+  color: "purple",
+  fillOpacity: 0.8,
+}).addTo(map);
+playerMarker.bindTooltip("Dreamwalker");
 
-// Display the player's points
-let playerPoints = 0;
-statusPanelDiv.innerHTML = "No points yet...";
+const CELL_SIZE_DEG = 0.0001;
+const visibleCells: L.Rectangle[] = [];
 
-// Add caches to the map by cell numbers
-function spawnCache(i: number, j: number) {
-  // Convert cell numbers into lat/lng bounds
-  const origin = CLASSROOM_LATLNG;
-  const bounds = leaflet.latLngBounds([
-    [origin.lat + i * TILE_DEGREES, origin.lng + j * TILE_DEGREES],
-    [origin.lat + (i + 1) * TILE_DEGREES, origin.lng + (j + 1) * TILE_DEGREES],
-  ]);
-
-  // Add a rectangle to the map to represent the cache
-  const rect = leaflet.rectangle(bounds);
-  rect.addTo(map);
-
-  // Handle interactions with the cache
-  rect.bindPopup(() => {
-    // Each cache has a random point value, mutable by the player
-    let pointValue = Math.floor(luck([i, j, "initialValue"].toString()) * 100);
-
-    // The popup offers a description and button
-    const popupDiv = document.createElement("div");
-    popupDiv.innerHTML = `
-                <div>There is a cache here at "${i},${j}". It has value <span id="value">${pointValue}</span>.</div>
-                <button id="poke">poke</button>`;
-
-    // Clicking the button decrements the cache's value and increments the player's points
-    popupDiv
-      .querySelector<HTMLButtonElement>("#poke")!
-      .addEventListener("click", () => {
-        pointValue--;
-        popupDiv.querySelector<HTMLSpanElement>("#value")!.innerHTML =
-          pointValue.toString();
-        playerPoints++;
-        statusPanelDiv.innerHTML = `${playerPoints} points accumulated`;
-      });
-
-    return popupDiv;
-  });
+// Convert latitude/longitude to integer cell indices
+function latToCellIndex(lat: number): number {
+  return Math.floor((lat - DREAM_ORIGIN.lat) / CELL_SIZE_DEG);
 }
 
-// Look around the player's neighborhood for caches to spawn
-for (let i = -NEIGHBORHOOD_SIZE; i < NEIGHBORHOOD_SIZE; i++) {
-  for (let j = -NEIGHBORHOOD_SIZE; j < NEIGHBORHOOD_SIZE; j++) {
-    // If location i,j is lucky enough, spawn a cache!
-    if (luck([i, j].toString()) < CACHE_SPAWN_PROBABILITY) {
-      spawnCache(i, j);
+function lngToCellIndex(lng: number): number {
+  return Math.floor((lng - DREAM_ORIGIN.lng) / CELL_SIZE_DEG);
+}
+
+// Draw cells covering current viewport
+function drawCells() {
+  for (const c of visibleCells) map.removeLayer(c);
+  visibleCells.length = 0;
+
+  const bounds = map.getBounds();
+  const startI = latToCellIndex(bounds.getSouth());
+  const endI = latToCellIndex(bounds.getNorth());
+  const startJ = lngToCellIndex(bounds.getWest());
+  const endJ = lngToCellIndex(bounds.getEast());
+
+  for (let i = startI; i <= endI; i++) {
+    for (let j = startJ; j <= endJ; j++) {
+      const rect = L.rectangle(
+        [
+          [
+            DREAM_ORIGIN.lat + i * CELL_SIZE_DEG,
+            DREAM_ORIGIN.lng + j * CELL_SIZE_DEG,
+          ],
+          [
+            DREAM_ORIGIN.lat + (i + 1) * CELL_SIZE_DEG,
+            DREAM_ORIGIN.lng + (j + 1) * CELL_SIZE_DEG,
+          ],
+        ],
+        { color: "#999", weight: 0.5, fillOpacity: 0.1 },
+      );
+      rect.addTo(map);
+      visibleCells.push(rect);
     }
   }
 }
+
+map.on("moveend", drawCells);
+drawCells();

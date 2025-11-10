@@ -1,3 +1,5 @@
 # CMPM 121 D3 Project
 
-This is the starting point for your CMPM 121 D3 project. Students should make sure to remove _this_ content from their README.md file and replace it with their own project documentation.
+Players explore a real-world map made of latitude–longitude grid cells.\
+Each cell may contain a digital “token” with a certain value.\
+Players can collect nearby tokens, combine tokens of the same value to craft higher-value ones, and aim to create the highest-value token possible.
