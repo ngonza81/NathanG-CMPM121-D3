@@ -33,17 +33,25 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 - [x] For each cell, use the deterministic `luck(...)` function to decide if it starts with a spirit fragment → initial state of cells is consistent across page loads.
 - [x] Visually show the cell’s content (empty vs spirit value) without clicking.
 
-### Interaction rules
+#### Interaction rules
 
 - [x] Define the player’s dream location as the origin (classroom lat/lng).
 - [x] When clicking a nearby cell → allow pickup/merge logic.
 - [x] When clicking a far cell → show “too far away” in status panel.
 
-### Inventory System
+#### Inventory System
 
-- [ ] Create a fixed UI element that shows the held spirit’s value or “empty-handed”.
-  - [ ] Update the UI text each time the player picks up or drops a spirit.
-- [ ] Allow picking up a spirit fragment from a nearby cell:
-  - [ ] Only if the player’s hand is empty.
-  - [ ] Picking up removes that spirit from the cell (updates the map visually).
-- [ ] Ensure player can hold at most one spirit at a time.
+- [x] Create a fixed UI element that shows the held spirit’s value or “empty-handed”.
+  - [x] Update the UI text each time the player picks up a spirit.
+- [x] Allow picking up a spirit fragment from a nearby cell:
+  - [x] Only if the player’s hand is empty.
+  - [x] Picking up removes that spirit from the cell (updates the map visually).
+- [x] Ensure player can hold at most one spirit at a time.
+
+#### Crafting System
+
+- [x] If the player is holding a spirit and clicks on a nearby cell containing a spirit of **equal value**, combine them into a single spirit of **double the value**.
+  - [x] Remove the player’s held spirit (set to empty-handed).
+  - [x] Update that cell’s value to the new doubled spirit.
+  - [x] Visually update the map (tooltip and fill).
+- [x] Detect when the player’s held spirit (after pickup or merge) reaches a target value (e.g. 8 or 16).

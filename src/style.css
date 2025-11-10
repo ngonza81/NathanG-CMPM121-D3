@@ -1,9 +1,35 @@
-#controlPanel {
-  padding: 1rem;
+#feedbackPanel {
+  position: fixed;
+  bottom: 1.5em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 1rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 1000;
 }
 
 #statusPanel {
-  padding: 1rem;
+  position: fixed;
+  bottom: 5.5em;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.5);
+  color: #ffd6ff;
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.9rem;
+  text-align: center;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.3);
+  z-index: 999;
+  opacity: 0.95;
+  transition: opacity 0.4s ease;
 }
 
 #map {

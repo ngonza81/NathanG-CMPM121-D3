@@ -15,10 +15,15 @@ statusPanel.id = "statusPanel";
 statusPanel.textContent = "No spirit held.";
 document.body.append(statusPanel);
 
+const feedbackPanel = document.createElement("div");
+feedbackPanel.id = "feedbackPanel";
+document.body.append(feedbackPanel);
+
 // ---- Map setup ---------------------------------------------------
 
 // Dreamwalker starting point (classroom)
 const DREAM_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
+let playerPos = DREAM_ORIGIN.clone();
 
 const MAP_ZOOM = 19;
 const CELL_SIZE_DEG = 0.0001; // ~house sized
@@ -46,10 +51,38 @@ const playerMarker = L.circleMarker(DREAM_ORIGIN, {
 }).addTo(map);
 playerMarker.bindTooltip("Dreamwalker");
 
-// We'll keep track of visible rects to clear them on move
-const visibleCells: L.Rectangle[] = [];
+// Added movement of position to test
+map.on("contextmenu", (e: L.LeafletMouseEvent) => {
+  e.originalEvent.preventDefault();
 
-//Convert a long/lat value to an integer cell index.
+  const newPos = e.latlng;
+  playerPos = newPos; // update player's position only
+  playerMarker.setLatLng(newPos);
+
+  feedbackPanel.textContent = `🧭 Moved Dreamwalker to (${
+    newPos.lat.toFixed(5)
+  }, ${newPos.lng.toFixed(5)}).`;
+
+  // redraw grid based on new player position
+  drawCells();
+});
+
+// ---- Player Inventory ----------------------------------------
+let heldSpirit: number | null = null;
+
+function updateStatusPanel() {
+  if (heldSpirit === null) {
+    statusPanel.textContent = "👐 Empty-handed.";
+  } else {
+    statusPanel.textContent = `✨ Holding spirit of value ${heldSpirit}.`;
+  }
+}
+
+updateStatusPanel();
+
+// ---- Helper Functions ----------------------------------------
+
+// Convert a long/lat value to an integer cell index.
 function latToCellIndex(lat: number): number {
   return Math.floor((lat - DREAM_ORIGIN.lat) / CELL_SIZE_DEG);
 }
@@ -59,25 +92,31 @@ function lngToCellIndex(lng: number): number {
 
 // Check if a cell (i, j) is close enough to interact with.
 function isCellNearPlayer(i: number, j: number): boolean {
-  const dist = Math.sqrt(i * i + j * j);
-  return dist <= INTERACTION_RADIUS_CELLS;
+  const cellLat = DREAM_ORIGIN.lat + i * CELL_SIZE_DEG;
+  const cellLng = DREAM_ORIGIN.lng + j * CELL_SIZE_DEG;
+  const distLat = Math.abs(cellLat - playerPos.lat);
+  const distLng = Math.abs(cellLng - playerPos.lng);
+  return (
+    distLat <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG &&
+    distLng <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG
+  );
 }
 
 // Grabs a spirit value: Returns 0 if empty, or a power-of-two-ish
 function getCellSpiritValue(i: number, j: number): number {
-  // use i,j and a label so different features can hash differently
   const r = luck(`${i},${j},spirit`);
-  // e.g. 20% chance to have a token
   if (r < 0.2) {
-    // pick 1 or 2 or 4 for now
     if (r < 0.07) return 4;
     if (r < 0.14) return 2;
     return 1;
   }
   return 0;
 }
+// ---- Cell Drawing --------------------------------------------
 
-// Draw all cells in the current viewport so it looks like the world is fully covered.
+const visibleCells: L.Rectangle[] = [];
+const cellOverrides: Record<string, number> = {};
+
 function drawCells() {
   // clear old
   for (const cell of visibleCells) {
@@ -86,8 +125,6 @@ function drawCells() {
   visibleCells.length = 0;
 
   const bounds = map.getBounds();
-
-  // figure out cell range to draw
   const startI = latToCellIndex(bounds.getSouth());
   const endI = latToCellIndex(bounds.getNorth());
   const startJ = lngToCellIndex(bounds.getWest());
@@ -95,12 +132,17 @@ function drawCells() {
 
   for (let i = startI; i <= endI; i++) {
     for (let j = startJ; j <= endJ; j++) {
-      // convert cell indices back to lat/lng bounds
       const cellSouth = DREAM_ORIGIN.lat + i * CELL_SIZE_DEG;
       const cellWest = DREAM_ORIGIN.lng + j * CELL_SIZE_DEG;
       const cellNorth = cellSouth + CELL_SIZE_DEG;
       const cellEast = cellWest + CELL_SIZE_DEG;
 
+      const key = `${i},${j}`;
+      const spiritValue = (key in cellOverrides)
+        ? cellOverrides[key]
+        : getCellSpiritValue(i, j);
+
+      // Create rectangle
       const rect = L.rectangle(
         [
           [cellSouth, cellWest],
@@ -109,13 +151,11 @@ function drawCells() {
         {
           weight: 0.5,
           color: isCellNearPlayer(i, j) ? "#ff66ff" : "#888",
-          fillOpacity: 0.08,
+          fillOpacity: spiritValue > 0 ? 0.12 : 0.05, // ✅ higher opacity for filled cells
         },
       );
 
-      // figure out if this cell has a spirit
-      const spiritValue = getCellSpiritValue(i, j);
-
+      // Display visible spirit tooltips
       if (spiritValue > 0) {
         rect.bindTooltip(`✨ ${spiritValue}`, {
           permanent: true,
@@ -124,19 +164,67 @@ function drawCells() {
         });
       }
 
-      // clicking the cell
+      // Clicking the cell
       rect.on("click", () => {
         if (!isCellNearPlayer(i, j)) {
-          statusPanel.textContent =
+          feedbackPanel.textContent =
             `That fragment is too far away. Move closer. (cell ${i},${j})`;
           return;
         }
-        // later: pickup / merge logic
-        if (spiritValue > 0) {
-          statusPanel.textContent =
-            `You reach into the dream and feel a spirit of value ${spiritValue} in cell ${i},${j}.`;
-        } else {
-          statusPanel.textContent = `Empty dream fragment at ${i},${j}.`;
+
+        const currentValue = (key in cellOverrides)
+          ? cellOverrides[key]
+          : getCellSpiritValue(i, j);
+
+        // --- PICKUP LOGIC ---
+        if (currentValue > 0 && heldSpirit === null) {
+          heldSpirit = currentValue;
+          cellOverrides[key] = 0; // mark as empty
+          updateStatusPanel();
+
+          rect.unbindTooltip();
+          rect.setStyle({ fillOpacity: 0.03 });
+          feedbackPanel.textContent =
+            `💫 You picked up a spirit of value ${currentValue} from (${i}, ${j}).`;
+          return;
+        }
+
+        // --- MERGE LOGIC ---
+        if (currentValue > 0 && heldSpirit === currentValue) {
+          const newValue = currentValue * 2;
+          heldSpirit = null;
+          cellOverrides[key] = newValue;
+          updateStatusPanel();
+
+          rect.bindTooltip(`✨ ${newValue}`, {
+            permanent: true,
+            direction: "center",
+            className: "cell-label",
+          });
+          rect.setStyle({ fillOpacity: 0.12 });
+          feedbackPanel.textContent =
+            `⚡ Spirits merge into one of value ${newValue}!`;
+          return;
+        }
+
+        // --- INVALID ACTIONS ---
+        if (heldSpirit !== null && currentValue === 0) {
+          feedbackPanel.textContent =
+            `This fragment is empty. You can only merge with another spirit.`;
+          return;
+        }
+
+        if (currentValue === 0 && heldSpirit === null) {
+          feedbackPanel.textContent = `Empty dream fragment at (${i}, ${j}).`;
+          return;
+        }
+
+        if (
+          heldSpirit !== null && currentValue !== heldSpirit && currentValue > 0
+        ) {
+          feedbackPanel.textContent =
+            `The spirits resist merging — their energies are unequal.`;
+          return;
         }
       });
 
