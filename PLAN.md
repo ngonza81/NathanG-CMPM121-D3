@@ -65,6 +65,11 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 #### Global Spanning
 
-- [x] Replace classroom anchor with **Null Island (0, 0)** as `DREAM_ORIGIN`.
-- [ ] Adjust `latToCellIndex` and `lngToCellIndex` to compute from global coordinates (no more local offset drift).
-- [ ] Refactor `isCellNearPlayer()` to handle global coordinates correctly.
+- [x] Replace classroom anchor with **Null Island (0, 0)** as `WORLD_ORIGIN`.
+- [x] Adjust `latToCellIndex` and `lngToCellIndex` to compute from global coordinates (no more local offset drift).
+- [x] Refactor `isCellNearPlayer()` to handle global coordinates correctly.
+
+#### Player Movement Simulation
+
+[ ] Add four directional buttons (WASD) to move the Dreamwalker by exactly one cell step.
+[ ] Update feedbackPanel each time the player moves.

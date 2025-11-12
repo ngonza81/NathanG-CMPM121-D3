@@ -59,18 +59,18 @@ const playerMarker = L.circleMarker(playerPos, {
 // ---- Utility Functions -----------------------------------------
 
 function latToCellIndex(lat: number) {
-  return Math.floor((lat - WORLD_ORIGIN.lat) / CELL_SIZE_DEG);
+  return Math.floor(lat / CELL_SIZE_DEG);
 }
 function lngToCellIndex(lng: number) {
-  return Math.floor((lng - WORLD_ORIGIN.lng) / CELL_SIZE_DEG);
+  return Math.floor(lng / CELL_SIZE_DEG);
 }
 function cellKey(i: number, j: number) {
   return `${i},${j}`;
 }
 
 function getCellLatLng(i: number, j: number) {
-  const south = WORLD_ORIGIN.lat + i * CELL_SIZE_DEG;
-  const west = WORLD_ORIGIN.lng + j * CELL_SIZE_DEG;
+  const south = i * CELL_SIZE_DEG;
+  const west = j * CELL_SIZE_DEG;
   return {
     south,
     west,
@@ -86,12 +86,14 @@ function getSpiritValue(i: number, j: number): number {
 }
 
 function isCellNearPlayer(i: number, j: number): boolean {
-  const cellLat = WORLD_ORIGIN.lat + i * CELL_SIZE_DEG;
-  const cellLng = WORLD_ORIGIN.lng + j * CELL_SIZE_DEG;
-  const dLat = Math.abs(cellLat - playerPos.lat);
-  const dLng = Math.abs(cellLng - playerPos.lng);
-  return dLat <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG &&
-    dLng <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG;
+  const cellLat = i * CELL_SIZE_DEG;
+  const cellLng = j * CELL_SIZE_DEG;
+  const distLat = Math.abs(cellLat - playerPos.lat);
+  const distLng = Math.abs(cellLng - playerPos.lng);
+  return (
+    distLat <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG &&
+    distLng <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG
+  );
 }
 
 function updateStatusPanel() {
@@ -106,7 +108,7 @@ function updateCellAppearance(
   nearby: boolean,
 ) {
   rect.setStyle({
-    color: nearby ? "#ff66ff" : "#888",
+    color: nearby ? "#d607d6ff" : "#888",
     fillOpacity: value > 0 ? FILL_OPACITY_FILLED : FILL_OPACITY_EMPTY,
   });
   rect.unbindTooltip();
