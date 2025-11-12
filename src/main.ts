@@ -11,6 +11,7 @@ const CELL_SIZE_DEG = 0.0001;
 const INTERACTION_RADIUS_CELLS = 3;
 const FILL_OPACITY_EMPTY = 0.05;
 const FILL_OPACITY_FILLED = 0.12;
+const VICTORY_VALUE = 32;
 
 const WORLD_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
 let playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
@@ -34,6 +35,32 @@ document.body.append(statusPanel);
 const feedbackPanel = document.createElement("div");
 feedbackPanel.id = "feedbackPanel";
 document.body.append(feedbackPanel);
+
+// ---- Win Condition ----------------------------------------------
+
+const winOverlay = document.createElement("div");
+winOverlay.id = "winOverlay";
+winOverlay.style.display = "none";
+document.body.append(winOverlay);
+
+function triggerVictory() {
+  winOverlay.innerHTML = "<h1>🌟 You Restored the Dream! 🌟</h1>";
+  winOverlay.style.display = "block";
+
+  requestAnimationFrame(() => {
+    winOverlay.classList.add("show");
+  });
+
+  map.dragging.disable();
+
+  setTimeout(() => {
+    winOverlay.innerHTML = "<h1>🌙 A new dream begins...</h1>";
+  }, 2500);
+
+  setTimeout(() => {
+    resetGame();
+  }, 5000);
+}
 
 // ---- Map setup --------------------------------------------------
 const map = L.map(mapDiv, {
@@ -129,6 +156,20 @@ function updateCellAppearance(
   }
 }
 
+function resetGame() {
+  gridState.heldSpirit = null;
+  updateStatusPanel();
+  winOverlay.classList.remove("show");
+  winOverlay.style.display = "none";
+  map.dragging.enable();
+
+  // Clear overrides so cells are new again
+  for (const key in gridState.overrides) delete gridState.overrides[key];
+
+  // Redraw the map
+  drawCells();
+}
+
 function handleCellClick(i: number, j: number, rect: L.Rectangle) {
   if (!isCellNearPlayer(i, j)) {
     feedbackPanel.textContent = `That fragment is too far away. Move closer.`;
@@ -159,6 +200,11 @@ function handleCellClick(i: number, j: number, rect: L.Rectangle) {
     updateStatusPanel();
     updateCellAppearance(rect, newValue, true);
     feedbackPanel.textContent = `⚡ Spirits merged! New value: ${newValue}.`;
+
+    if (newValue >= VICTORY_VALUE) {
+      triggerVictory();
+    }
+
     return;
   }
 

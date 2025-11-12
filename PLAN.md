@@ -77,5 +77,6 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 #### Crafting & Victory
 
-- [ ] Add win threshold
-- [ ] Test crafting flow across different coordinates (e.g. move north, craft again).
+- [x] Add win threshold
+- [x] Test crafting flow across different coordinates (e.g. move north, craft again).
+- [] Add dropping dream fragement mechanic

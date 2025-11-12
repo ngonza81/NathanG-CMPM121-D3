@@ -32,6 +32,27 @@
   transition: opacity 0.4s ease;
 }
 
+#winOverlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 2rem 3rem;
+  border-radius: 1rem;
+  text-align: center;
+  font-size: 2rem;
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+
+#winOverlay.show {
+  display: block;
+  opacity: 1;
+}
+
 #map {
   width: 100%;
   height: 80vh;
