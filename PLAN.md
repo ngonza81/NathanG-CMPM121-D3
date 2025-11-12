@@ -55,3 +55,16 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
   - [x] Update that cell’s value to the new doubled spirit.
   - [x] Visually update the map (tooltip and fill).
 - [x] Detect when the player’s held spirit (after pickup or merge) reaches a target value (e.g. 8 or 16).
+
+## D3.b: Globe-spanning Gameplay
+
+**Key technical challenge:** Can you assemble a map-based user interface using the Leaflet mapping framework?**
+**Key gameplay challenge:** Can players craft an even higher value token by moving to other locations to get access to additional crafting materials?
+
+### Steps(3b)
+
+#### Global Spanning
+
+- [x] Replace classroom anchor with **Null Island (0, 0)** as `DREAM_ORIGIN`.
+- [ ] Adjust `latToCellIndex` and `lngToCellIndex` to compute from global coordinates (no more local offset drift).
+- [ ] Refactor `isCellNearPlayer()` to handle global coordinates correctly.
