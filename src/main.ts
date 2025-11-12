@@ -13,7 +13,7 @@ const FILL_OPACITY_EMPTY = 0.05;
 const FILL_OPACITY_FILLED = 0.12;
 
 const WORLD_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
-let playerPos = WORLD_ORIGIN.clone();
+let playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
 
 // ---- State -----------------------------------------------------
 const gridState = {
@@ -35,7 +35,7 @@ const feedbackPanel = document.createElement("div");
 feedbackPanel.id = "feedbackPanel";
 document.body.append(feedbackPanel);
 
-// ---- Map setup -------------------------------------------------
+// ---- Map setup --------------------------------------------------
 const map = L.map(mapDiv, {
   center: WORLD_ORIGIN,
   zoom: MAP_ZOOM,
@@ -94,6 +94,14 @@ function isCellNearPlayer(i: number, j: number): boolean {
     distLat <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG &&
     distLng <= INTERACTION_RADIUS_CELLS * CELL_SIZE_DEG
   );
+}
+
+function centerPlayerOnGrid(lat: number, lng: number): L.LatLng {
+  const i = Math.floor(lat / CELL_SIZE_DEG);
+  const j = Math.floor(lng / CELL_SIZE_DEG);
+  const centeredLat = (i + 0.5) * CELL_SIZE_DEG;
+  const centeredLng = (j + 0.5) * CELL_SIZE_DEG;
+  return L.latLng(centeredLat, centeredLng);
 }
 
 function updateStatusPanel() {
@@ -165,6 +173,7 @@ function handleCellClick(i: number, j: number, rect: L.Rectangle) {
 }
 
 // ---- Grid Rendering --------------------------------------------
+
 function drawCells() {
   // Clear old cells
   for (const cell of gridState.visibleCells) map.removeLayer(cell);
@@ -196,15 +205,38 @@ function drawCells() {
 }
 
 // ---- Player Movement --------------------------------------------
-map.on("contextmenu", (e: L.LeafletMouseEvent) => {
-  e.originalEvent.preventDefault();
-  playerPos = e.latlng;
-  playerMarker.setLatLng(playerPos);
-  feedbackPanel.textContent = `🧭 Dreamwalker moved to (${
-    playerPos.lat.toFixed(5)
-  }, ${playerPos.lng.toFixed(5)}).`;
-  drawCells();
+
+document.addEventListener("keydown", (e) => {
+  switch (e.key.toLowerCase()) {
+    case "w": // move north
+      movePlayer(0, 1);
+      break;
+    case "s": // move south
+      movePlayer(0, -1);
+      break;
+    case "a": // move west
+      movePlayer(-1, 0);
+      break;
+    case "d": // move east
+      movePlayer(1, 0);
+      break;
+  }
 });
+
+function movePlayer(dx: number, dy: number) {
+  const newLat = playerPos.lat + dy * CELL_SIZE_DEG;
+  const newLng = playerPos.lng + dx * CELL_SIZE_DEG;
+
+  playerPos = centerPlayerOnGrid(newLat, newLng);
+  playerMarker.setLatLng(playerPos);
+
+  feedbackPanel.textContent = `Dreamwalker moved to (${newLat.toFixed(5)}, ${
+    newLng.toFixed(5)
+  }).`;
+
+  drawCells();
+  map.panTo(playerPos);
+}
 
 map.on("moveend", drawCells);
 drawCells();

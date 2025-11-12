@@ -71,5 +71,11 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 #### Player Movement Simulation
 
-[ ] Add four directional buttons (WASD) to move the Dreamwalker by exactly one cell step.
-[ ] Update feedbackPanel each time the player moves.
+- [x] Add four directional buttons (WASD) to move the Dreamwalker by exactly one cell step.
+- [x] Update feedbackPanel each time the player moves.
+- [x] Center Dreamwalker marker in the middle of the current grid cell
+
+#### Crafting & Victory
+
+- [ ] Add win threshold
+- [ ] Test crafting flow across different coordinates (e.g. move north, craft again).
