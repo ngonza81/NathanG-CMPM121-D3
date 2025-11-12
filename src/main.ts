@@ -6,63 +6,38 @@ import "./_leafletWorkaround.ts";
 import luck from "./_luck.ts";
 
 // ---- Constants & Config ----------------------------------------
+
 const MAP_ZOOM = 19;
 const CELL_SIZE_DEG = 0.0001;
 const INTERACTION_RADIUS_CELLS = 3;
 const FILL_OPACITY_EMPTY = 0.05;
 const FILL_OPACITY_FILLED = 0.12;
 const VICTORY_VALUE = 32;
-
+const TEXT_DECIMALS = 5;
+const WIN_MESSAGE_TIME = 2500;
+const RESET_DELAY = 5000;
 const WORLD_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
-let playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
 
-// ---- State -----------------------------------------------------
+// ---- State ------------------------------------------------------
+
+let playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
 const gridState = {
   visibleCells: [] as L.Rectangle[],
   overrides: {} as Record<string, number>,
   heldSpirit: null as number | null,
 };
 
-// ---- UI setup --------------------------------------------------
-const mapDiv = document.createElement("div");
-mapDiv.id = "map";
-document.body.append(mapDiv);
+// ---- UI Setup ---------------------------------------------------
 
-const statusPanel = document.createElement("div");
-statusPanel.id = "statusPanel";
-document.body.append(statusPanel);
+const mapDiv = createDiv("map");
+const statusPanel = createDiv("statusPanel");
+const feedbackPanel = createDiv("feedbackPanel");
+const winOverlay = createWinOverlay();
 
-const feedbackPanel = document.createElement("div");
-feedbackPanel.id = "feedbackPanel";
-document.body.append(feedbackPanel);
+document.body.append(mapDiv, statusPanel, feedbackPanel, winOverlay);
 
-// ---- Win Condition ----------------------------------------------
+// ---- Map Setup --------------------------------------------------
 
-const winOverlay = document.createElement("div");
-winOverlay.id = "winOverlay";
-winOverlay.style.display = "none";
-document.body.append(winOverlay);
-
-function triggerVictory() {
-  winOverlay.innerHTML = "<h1>🌟 You Restored the Dream! 🌟</h1>";
-  winOverlay.style.display = "block";
-
-  requestAnimationFrame(() => {
-    winOverlay.classList.add("show");
-  });
-
-  map.dragging.disable();
-
-  setTimeout(() => {
-    winOverlay.innerHTML = "<h1>🌙 A new dream begins...</h1>";
-  }, 2500);
-
-  setTimeout(() => {
-    resetGame();
-  }, 5000);
-}
-
-// ---- Map setup --------------------------------------------------
 const map = L.map(mapDiv, {
   center: WORLD_ORIGIN,
   zoom: MAP_ZOOM,
@@ -83,7 +58,20 @@ const playerMarker = L.circleMarker(playerPos, {
   fillOpacity: 0.8,
 }).addTo(map).bindTooltip("Dreamwalker");
 
-// ---- Utility Functions -----------------------------------------
+// ---- Utility Functions ------------------------------------------
+
+function createDiv(id: string): HTMLDivElement {
+  const div = document.createElement("div");
+  div.id = id;
+  return div;
+}
+
+function createWinOverlay(): HTMLDivElement {
+  const div = document.createElement("div");
+  div.id = "winOverlay";
+  div.style.display = "none";
+  return div;
+}
 
 function latToCellIndex(lat: number) {
   return Math.floor(lat / CELL_SIZE_DEG);
@@ -106,10 +94,25 @@ function getCellLatLng(i: number, j: number) {
   };
 }
 
+function getCellCenter(i: number, j: number) {
+  const { south, west } = getCellLatLng(i, j);
+  return {
+    lat: south + CELL_SIZE_DEG / 2,
+    lng: west + CELL_SIZE_DEG / 2,
+  };
+}
+
 function getSpiritValue(i: number, j: number): number {
   const r = luck(`${i},${j},spirit`);
   if (r < 0.2) return r < 0.07 ? 4 : r < 0.14 ? 2 : 1;
   return 0;
+}
+
+function getSpiritAt(i: number, j: number): number {
+  const key = cellKey(i, j);
+  return key in gridState.overrides
+    ? gridState.overrides[key]
+    : getSpiritValue(i, j);
 }
 
 function isCellNearPlayer(i: number, j: number): boolean {
@@ -126,15 +129,19 @@ function isCellNearPlayer(i: number, j: number): boolean {
 function centerPlayerOnGrid(lat: number, lng: number): L.LatLng {
   const i = Math.floor(lat / CELL_SIZE_DEG);
   const j = Math.floor(lng / CELL_SIZE_DEG);
-  const centeredLat = (i + 0.5) * CELL_SIZE_DEG;
-  const centeredLng = (j + 0.5) * CELL_SIZE_DEG;
-  return L.latLng(centeredLat, centeredLng);
+  return L.latLng((i + 0.5) * CELL_SIZE_DEG, (j + 0.5) * CELL_SIZE_DEG);
 }
+
+// ---- UI / State Helpers -----------------------------------------
 
 function updateStatusPanel() {
   statusPanel.textContent = gridState.heldSpirit
     ? `✨ Holding spirit of value ${gridState.heldSpirit}.`
     : "👐 Empty-handed.";
+}
+
+function showFeedback(message: string) {
+  feedbackPanel.textContent = message;
 }
 
 function updateCellAppearance(
@@ -156,73 +163,93 @@ function updateCellAppearance(
   }
 }
 
+// ---- Gameplay Actions -------------------------------------------
+
+function performPickup(i: number, j: number, rect: L.Rectangle, value: number) {
+  gridState.heldSpirit = value;
+  gridState.overrides[cellKey(i, j)] = 0;
+  updateStatusPanel();
+  updateCellAppearance(rect, 0, true);
+  showFeedback(`💫 Picked up a spirit of value ${value}.`);
+}
+
+function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
+  const newValue = value * 2;
+  gridState.overrides[cellKey(i, j)] = newValue;
+  gridState.heldSpirit = null;
+  updateStatusPanel();
+  updateCellAppearance(rect, newValue, true);
+  showFeedback(`⚡ Spirits merged! New value: ${newValue}.`);
+  if (newValue >= VICTORY_VALUE) triggerVictory();
+}
+
+function performDrop(i: number, j: number, rect: L.Rectangle) {
+  gridState.overrides[cellKey(i, j)] = gridState.heldSpirit!;
+  const { lat, lng } = getCellCenter(i, j);
+  showFeedback(
+    `🌠 You placed a spirit of value ${gridState.heldSpirit} into (${
+      lat.toFixed(TEXT_DECIMALS)
+    }, ${lng.toFixed(TEXT_DECIMALS)}).`,
+  );
+  gridState.heldSpirit = null;
+  updateStatusPanel();
+  updateCellAppearance(rect, gridState.overrides[cellKey(i, j)], true);
+}
+
+// ---- Victory Logic ----------------------------------------------
+
+function triggerVictory() {
+  winOverlay.innerHTML = "<h1>🌟 You Restored the Dream! 🌟</h1>";
+  winOverlay.style.display = "block";
+
+  requestAnimationFrame(() => winOverlay.classList.add("show"));
+  map.dragging.disable();
+
+  setTimeout(
+    () => (winOverlay.innerHTML = "<h1>🌙 A new dream begins...</h1>"),
+    WIN_MESSAGE_TIME,
+  );
+  setTimeout(() => resetGame(), RESET_DELAY);
+}
+
 function resetGame() {
   gridState.heldSpirit = null;
   updateStatusPanel();
   winOverlay.classList.remove("show");
   winOverlay.style.display = "none";
   map.dragging.enable();
-
-  // Clear overrides so cells are new again
-  for (const key in gridState.overrides) delete gridState.overrides[key];
-
-  // Redraw the map
+  gridState.overrides = {};
   drawCells();
 }
 
+// ---- Cell Interaction -------------------------------------------
+
 function handleCellClick(i: number, j: number, rect: L.Rectangle) {
   if (!isCellNearPlayer(i, j)) {
-    feedbackPanel.textContent = `That fragment is too far away. Move closer.`;
-    return;
+    return showFeedback(`That fragment is too far away.`);
   }
 
-  const key = cellKey(i, j);
-  const currentValue = key in gridState.overrides
-    ? gridState.overrides[key]
-    : getSpiritValue(i, j);
+  const currentValue = getSpiritAt(i, j);
+  const held = gridState.heldSpirit;
 
-  // --- PICKUP ---
-  if (currentValue > 0 && gridState.heldSpirit === null) {
-    gridState.heldSpirit = currentValue;
-    gridState.overrides[key] = 0;
-    updateStatusPanel();
-    updateCellAppearance(rect, 0, true);
-    feedbackPanel.textContent =
-      `💫 Picked up a spirit of value ${currentValue}.`;
-    return;
+  if (currentValue > 0 && held === null) {
+    return performPickup(i, j, rect, currentValue);
   }
-
-  // --- MERGE ---
-  if (currentValue > 0 && gridState.heldSpirit === currentValue) {
-    const newValue = currentValue * 2;
-    gridState.overrides[key] = newValue;
-    gridState.heldSpirit = null;
-    updateStatusPanel();
-    updateCellAppearance(rect, newValue, true);
-    feedbackPanel.textContent = `⚡ Spirits merged! New value: ${newValue}.`;
-
-    if (newValue >= VICTORY_VALUE) {
-      triggerVictory();
-    }
-
-    return;
+  if (currentValue > 0 && held === currentValue) {
+    return performMerge(i, j, rect, currentValue);
   }
+  if (held && currentValue === 0) return performDrop(i, j, rect);
 
-  // --- INVALIDS ---
-  if (gridState.heldSpirit && currentValue === 0) {
-    feedbackPanel.textContent = "This fragment is empty.";
-  } else if (gridState.heldSpirit === null && currentValue === 0) {
-    feedbackPanel.textContent = "Empty dream fragment.";
-  } else {
-    feedbackPanel.textContent = "The spirits resist merging.";
+  if (held === null && currentValue === 0) {
+    return showFeedback("Empty dream fragment.");
   }
+  showFeedback("The spirits resist merging.");
 }
 
-// ---- Grid Rendering --------------------------------------------
+// ---- Grid Rendering ---------------------------------------------
 
 function drawCells() {
-  // Clear old cells
-  for (const cell of gridState.visibleCells) map.removeLayer(cell);
+  gridState.visibleCells.forEach((c) => map.removeLayer(c));
   gridState.visibleCells.length = 0;
 
   const bounds = map.getBounds();
@@ -234,15 +261,9 @@ function drawCells() {
   for (let i = startI; i <= endI; i++) {
     for (let j = startJ; j <= endJ; j++) {
       const { south, west, north, east } = getCellLatLng(i, j);
-      const key = cellKey(i, j);
-      const spiritValue = key in gridState.overrides
-        ? gridState.overrides[key]
-        : getSpiritValue(i, j);
-
+      const spiritValue = getSpiritAt(i, j);
       const rect = L.rectangle([[south, west], [north, east]], { weight: 0.5 });
-      const nearby = isCellNearPlayer(i, j);
-      updateCellAppearance(rect, spiritValue, nearby);
-
+      updateCellAppearance(rect, spiritValue, isCellNearPlayer(i, j));
       rect.on("click", () => handleCellClick(i, j, rect));
       rect.addTo(map);
       gridState.visibleCells.push(rect);
@@ -253,36 +274,29 @@ function drawCells() {
 // ---- Player Movement --------------------------------------------
 
 document.addEventListener("keydown", (e) => {
-  switch (e.key.toLowerCase()) {
-    case "w": // move north
-      movePlayer(0, 1);
-      break;
-    case "s": // move south
-      movePlayer(0, -1);
-      break;
-    case "a": // move west
-      movePlayer(-1, 0);
-      break;
-    case "d": // move east
-      movePlayer(1, 0);
-      break;
-  }
+  const key = e.key.toLowerCase();
+  if (!["w", "a", "s", "d"].includes(key)) return;
+  movePlayer(
+    key === "d" ? 1 : key === "a" ? -1 : 0,
+    key === "w" ? 1 : key === "s" ? -1 : 0,
+  );
 });
 
 function movePlayer(dx: number, dy: number) {
   const newLat = playerPos.lat + dy * CELL_SIZE_DEG;
   const newLng = playerPos.lng + dx * CELL_SIZE_DEG;
-
   playerPos = centerPlayerOnGrid(newLat, newLng);
   playerMarker.setLatLng(playerPos);
-
-  feedbackPanel.textContent = `Dreamwalker moved to (${newLat.toFixed(5)}, ${
-    newLng.toFixed(5)
-  }).`;
-
+  showFeedback(
+    `Dreamwalker moved to (${newLat.toFixed(TEXT_DECIMALS)}, ${
+      newLng.toFixed(TEXT_DECIMALS)
+    }).`,
+  );
   drawCells();
   map.panTo(playerPos);
 }
+
+// ---- Initialize -------------------------------------------------
 
 map.on("moveend", drawCells);
 drawCells();
