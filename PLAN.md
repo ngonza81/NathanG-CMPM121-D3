@@ -88,9 +88,17 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 ### Steps(3c)
 
+#### Flyweight Pattern
+
+- [x] Refactor cell storage to use a Map<string, number>.
+- [x] Only store modified cells (picked up, merged, or dropped).
+
+#### Memento Pattern
+
+- [] Implement saveMemento(i, j, value) to store a modified cell.
+- [] Implement restoreMemento(i, j) to retrieve a stored cell or fallback to deterministic luck().
+
 #### Map and Cell Memory
 
 - [] Modified cells retain their state even after scrolling off the map.
 - [] Unmodified cells remain procedural (memoryless) until interacted with.
-- [] Implement the Flyweight pattern.
-- [] Implement the Memento pattern.

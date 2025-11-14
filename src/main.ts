@@ -23,9 +23,9 @@ const WORLD_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
 let playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
 const gridState = {
   visibleCells: [] as L.Rectangle[],
-  overrides: {} as Record<string, number>,
   heldSpirit: null as number | null,
 };
+const cellMemory = new Map<string, number>();
 
 // ---- UI Setup ---------------------------------------------------
 
@@ -110,9 +110,7 @@ function getSpiritValue(i: number, j: number): number {
 
 function getSpiritAt(i: number, j: number): number {
   const key = cellKey(i, j);
-  return key in gridState.overrides
-    ? gridState.overrides[key]
-    : getSpiritValue(i, j);
+  return cellMemory.has(key) ? cellMemory.get(key)! : getSpiritValue(i, j);
 }
 
 function isCellNearPlayer(i: number, j: number): boolean {
@@ -166,16 +164,18 @@ function updateCellAppearance(
 // ---- Gameplay Actions -------------------------------------------
 
 function performPickup(i: number, j: number, rect: L.Rectangle, value: number) {
+  const key = cellKey(i, j);
   gridState.heldSpirit = value;
-  gridState.overrides[cellKey(i, j)] = 0;
+  cellMemory.set(key, 0);
   updateStatusPanel();
   updateCellAppearance(rect, 0, true);
   showFeedback(`💫 Picked up a spirit of value ${value}.`);
 }
 
 function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
+  const key = cellKey(i, j);
   const newValue = value * 2;
-  gridState.overrides[cellKey(i, j)] = newValue;
+  cellMemory.set(key, newValue); // <- store merged value
   gridState.heldSpirit = null;
   updateStatusPanel();
   updateCellAppearance(rect, newValue, true);
@@ -184,16 +184,18 @@ function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
 }
 
 function performDrop(i: number, j: number, rect: L.Rectangle) {
-  gridState.overrides[cellKey(i, j)] = gridState.heldSpirit!;
+  const key = cellKey(i, j);
+  const value = gridState.heldSpirit!;
+  cellMemory.set(key, value);
   const { lat, lng } = getCellCenter(i, j);
   showFeedback(
-    `🌠 You placed a spirit of value ${gridState.heldSpirit} into (${
+    `🌠 You placed a spirit of value ${value} into (${
       lat.toFixed(TEXT_DECIMALS)
     }, ${lng.toFixed(TEXT_DECIMALS)}).`,
   );
   gridState.heldSpirit = null;
   updateStatusPanel();
-  updateCellAppearance(rect, gridState.overrides[cellKey(i, j)], true);
+  updateCellAppearance(rect, value, true);
 }
 
 // ---- Victory Logic ----------------------------------------------
@@ -218,7 +220,7 @@ function resetGame() {
   winOverlay.classList.remove("show");
   winOverlay.style.display = "none";
   map.dragging.enable();
-  gridState.overrides = {};
+  cellMemory.clear();
   drawCells();
 }
 
