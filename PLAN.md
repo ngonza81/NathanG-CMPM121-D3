@@ -80,3 +80,17 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 - [x] Add win threshold
 - [x] Test crafting flow across different coordinates (e.g. move north, craft again).
 - [x] Add dropping dream fragement mechanic
+
+## D3.c: Object persistence
+
+**Key technical challenge:** Can your software accurately remember the state of map cells even when they scroll off the screen?
+**Key gameplay challenge:** Can you fix a gameplay bug where players can farm tokens by moving into and out of a region repeatedly to get access to fresh resources?
+
+### Steps(3c)
+
+#### Map and Cell Memory
+
+- [] Modified cells retain their state even after scrolling off the map.
+- [] Unmodified cells remain procedural (memoryless) until interacted with.
+- [] Implement the Flyweight pattern.
+- [] Implement the Memento pattern.
