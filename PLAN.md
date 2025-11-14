@@ -95,10 +95,10 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 #### Memento Pattern
 
-- [] Implement saveMemento(i, j, value) to store a modified cell.
-- [] Implement restoreMemento(i, j) to retrieve a stored cell or fallback to deterministic luck().
+- [x] Implement saveMemento(i, j, value) to store a modified cell.
+- [x] Implement restoreMemento(i, j) to retrieve a stored cell or fallback to deterministic luck().
 
 #### Map and Cell Memory
 
-- [] Modified cells retain their state even after scrolling off the map.
-- [] Unmodified cells remain procedural (memoryless) until interacted with.
+- [x] Modified cells retain their state even after scrolling off the map.
+- [x] Unmodified cells remain procedural (memoryless) until interacted with.

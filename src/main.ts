@@ -5,7 +5,12 @@ import "./style.css";
 import "./_leafletWorkaround.ts";
 import luck from "./_luck.ts";
 
-// ---- Constants & Config ----------------------------------------
+// ---- Types ------------------------------------------------------
+interface CellMemento {
+  value: number;
+}
+
+// ---- Constants & Config -----------------------------------------
 
 const MAP_ZOOM = 19;
 const CELL_SIZE_DEG = 0.0001;
@@ -25,7 +30,7 @@ const gridState = {
   visibleCells: [] as L.Rectangle[],
   heldSpirit: null as number | null,
 };
-const cellMemory = new Map<string, number>();
+const cellMemory = new Map<string, CellMemento>();
 
 // ---- UI Setup ---------------------------------------------------
 
@@ -110,7 +115,9 @@ function getSpiritValue(i: number, j: number): number {
 
 function getSpiritAt(i: number, j: number): number {
   const key = cellKey(i, j);
-  return cellMemory.has(key) ? cellMemory.get(key)! : getSpiritValue(i, j);
+  return cellMemory.has(key)
+    ? cellMemory.get(key)!.value
+    : getSpiritValue(i, j);
 }
 
 function isCellNearPlayer(i: number, j: number): boolean {
@@ -166,7 +173,7 @@ function updateCellAppearance(
 function performPickup(i: number, j: number, rect: L.Rectangle, value: number) {
   const key = cellKey(i, j);
   gridState.heldSpirit = value;
-  cellMemory.set(key, 0);
+  cellMemory.set(key, { value: 0 });
   updateStatusPanel();
   updateCellAppearance(rect, 0, true);
   showFeedback(`💫 Picked up a spirit of value ${value}.`);
@@ -175,7 +182,7 @@ function performPickup(i: number, j: number, rect: L.Rectangle, value: number) {
 function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
   const key = cellKey(i, j);
   const newValue = value * 2;
-  cellMemory.set(key, newValue); // <- store merged value
+  cellMemory.set(key, { value: newValue });
   gridState.heldSpirit = null;
   updateStatusPanel();
   updateCellAppearance(rect, newValue, true);
@@ -186,7 +193,7 @@ function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
 function performDrop(i: number, j: number, rect: L.Rectangle) {
   const key = cellKey(i, j);
   const value = gridState.heldSpirit!;
-  cellMemory.set(key, value);
+  cellMemory.set(key, { value: value });
   const { lat, lng } = getCellCenter(i, j);
   showFeedback(
     `🌠 You placed a spirit of value ${value} into (${
