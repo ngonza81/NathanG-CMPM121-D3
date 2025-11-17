@@ -123,3 +123,7 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 - [x] Restore game state on page load
 - [x] Auto-save after every meaningful action
 - [x] Add “New Game” button
+
+#### UI Stuff
+
+- [x] Add sound effect when getting needed amount for victory
