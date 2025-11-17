@@ -170,6 +170,18 @@ movementToggle.addEventListener("click", () => {
   }
 });
 
+// ---- New Game Button --------------------------------------------
+
+const newGameButton = document.createElement("button");
+newGameButton.id = "newGameButton";
+newGameButton.textContent = "New Game";
+document.body.append(newGameButton);
+
+newGameButton.addEventListener("click", () => {
+  localStorage.removeItem(SAVE_KEY);
+  location.reload();
+});
+
 // ---- UI Setup ---------------------------------------------------
 
 const mapDiv = createDiv("map");
@@ -296,6 +308,7 @@ function handleMoveEvent(lat: number, lng: number) {
 
   drawCells();
   map.panTo(playerPos);
+  saveGame();
 }
 
 // ---- UI / State Helpers -----------------------------------------
@@ -329,6 +342,66 @@ function updateCellAppearance(
   }
 }
 
+// ---- Game Persistence -------------------------------------------
+
+const SAVE_KEY = "dreamlink-save-v1";
+
+// Save full game state into localStorage
+function saveGame() {
+  const data = {
+    player: {
+      lat: playerPos.lat,
+      lng: playerPos.lng,
+    },
+    heldSpirit: gridState.heldSpirit,
+    cellMemory: Array.from(cellMemory.entries()), // convert Map → array
+    movementMode: movementController instanceof GeoMovementController
+      ? "geo"
+      : "button",
+  };
+
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+}
+
+// Load game state from localStorage
+function loadGame() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return false;
+
+  try {
+    const data = JSON.parse(raw);
+
+    // Restore player
+    playerPos = L.latLng(data.player.lat, data.player.lng);
+    playerMarker.setLatLng(playerPos);
+    map.panTo(playerPos);
+
+    // Restore held spirit
+    gridState.heldSpirit = data.heldSpirit;
+    updateStatusPanel();
+
+    // Restore cell memory
+    cellMemory.clear();
+    for (const [key, memento] of data.cellMemory) {
+      cellMemory.set(key, memento);
+    }
+
+    // Restore movement mode
+    if (data.movementMode === "geo") {
+      setMovementController(new GeoMovementController());
+      movementToggle.textContent = "Switch to Button Movement";
+    } else {
+      setMovementController(new ButtonMovementController());
+      movementToggle.textContent = "Switch to Geo Movement";
+    }
+
+    return true;
+  } catch (err) {
+    console.error("Failed to load save:", err);
+    return false;
+  }
+}
+
 // ---- Gameplay Actions -------------------------------------------
 
 function performPickup(i: number, j: number, rect: L.Rectangle, value: number) {
@@ -338,6 +411,7 @@ function performPickup(i: number, j: number, rect: L.Rectangle, value: number) {
   updateStatusPanel();
   updateCellAppearance(rect, 0, true);
   showFeedback(`💫 Picked up a spirit of value ${value}.`);
+  saveGame();
 }
 
 function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
@@ -349,6 +423,7 @@ function performMerge(i: number, j: number, rect: L.Rectangle, value: number) {
   updateCellAppearance(rect, newValue, true);
   showFeedback(`⚡ Spirits merged! New value: ${newValue}.`);
   if (newValue >= VICTORY_VALUE) triggerVictory();
+  saveGame();
 }
 
 function performDrop(i: number, j: number, rect: L.Rectangle) {
@@ -364,6 +439,7 @@ function performDrop(i: number, j: number, rect: L.Rectangle) {
   gridState.heldSpirit = null;
   updateStatusPanel();
   updateCellAppearance(rect, value, true);
+  saveGame();
 }
 
 // ---- Victory Logic ----------------------------------------------
@@ -449,5 +525,13 @@ movementController.start();
 // ---- Initialize -------------------------------------------------
 
 map.on("moveend", drawCells);
+
+const loaded = loadGame();
+if (!loaded) {
+  playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
+  playerMarker.setLatLng(playerPos);
+  map.panTo(playerPos);
+}
+
 drawCells();
 updateStatusPanel();

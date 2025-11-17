@@ -119,7 +119,7 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 #### Game State
 
-- [] Save full game state to localStorage
-- [] Restore game state on page load
-- [] Auto-save after every meaningful action
-- [] Add “New Game” button
+- [x] Save full game state to localStorage
+- [x] Restore game state on page load
+- [x] Auto-save after every meaningful action
+- [x] Add “New Game” button
