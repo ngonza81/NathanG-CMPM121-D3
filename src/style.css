@@ -32,6 +32,25 @@
   transition: opacity 0.4s ease;
 }
 
+#movementToggle {
+  position: fixed;
+  bottom: 1.5em;
+  left: calc(50% + 300px);
+  transform: translateX(-50%);
+
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-family: "Segoe UI", sans-serif;
+  font-size: 0.9rem;
+  cursor: pointer;
+  z-index: 1100;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: 0.2s ease;
+}
+
 #winOverlay {
   position: fixed;
   top: 50%;

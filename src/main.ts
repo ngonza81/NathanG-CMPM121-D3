@@ -10,6 +10,12 @@ interface CellMemento {
   value: number;
 }
 
+interface MovementController {
+  start(): void;
+  stop(): void;
+  onMove(callback: (lat: number, lng: number) => void): void;
+}
+
 // ---- Constants & Config -----------------------------------------
 
 const MAP_ZOOM = 19;
@@ -23,14 +29,146 @@ const WIN_MESSAGE_TIME = 2500;
 const RESET_DELAY = 5000;
 const WORLD_ORIGIN = L.latLng(36.997936938057016, -122.05703507501151);
 
-// ---- State ------------------------------------------------------
+// ---- Movement Controllers ----------------------------------------
 
-let playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
+class ButtonMovementController implements MovementController {
+  private callback: ((lat: number, lng: number) => void) | null = null;
+
+  onMove(cb: (lat: number, lng: number) => void) {
+    this.callback = cb;
+  }
+
+  start() {
+    document.addEventListener("keydown", this.handleKey);
+  }
+
+  stop() {
+    document.removeEventListener("keydown", this.handleKey);
+  }
+
+  private handleKey = (e: KeyboardEvent) => {
+    if (!this.callback) return;
+
+    let dx = 0;
+    let dy = 0;
+
+    switch (e.key.toLowerCase()) {
+      case "w":
+        dy = CELL_SIZE_DEG;
+        break;
+      case "s":
+        dy = -CELL_SIZE_DEG;
+        break;
+      case "a":
+        dx = -CELL_SIZE_DEG;
+        break;
+      case "d":
+        dx = CELL_SIZE_DEG;
+        break;
+    }
+
+    if (dx !== 0 || dy !== 0) {
+      const newLat = playerPos.lat + dy;
+      const newLng = playerPos.lng + dx;
+      this.callback(newLat, newLng);
+    }
+  };
+}
+
+class GeoMovementController implements MovementController {
+  private watchId: number | null = null;
+  private callback: ((lat: number, lng: number) => void) | null = null;
+
+  onMove(cb: (lat: number, lng: number) => void) {
+    this.callback = cb;
+  }
+
+  start() {
+    if (!navigator.geolocation) {
+      console.error("Geolocation not supported on this device.");
+      return;
+    }
+
+    this.watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!this.callback) return;
+
+        const rawLat = pos.coords.latitude;
+        const rawLng = pos.coords.longitude;
+
+        const gridPos = centerPlayerOnGrid(rawLat, rawLng);
+
+        if (
+          gridPos.lat !== playerPos.lat ||
+          gridPos.lng !== playerPos.lng
+        ) {
+          this.callback(gridPos.lat, gridPos.lng);
+        }
+      },
+      (err) => {
+        console.error("GPS error:", err);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 5000,
+      },
+    );
+  }
+
+  stop() {
+    if (this.watchId !== null) {
+      navigator.geolocation.clearWatch(this.watchId);
+    }
+  }
+}
+
+// ---- State ------------------------------------------------------
+let playerPos = WORLD_ORIGIN;
+
+navigator.geolocation.getCurrentPosition(
+  (pos) => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+
+    playerPos = centerPlayerOnGrid(lat, lng);
+    playerMarker.setLatLng(playerPos);
+    map.panTo(playerPos);
+    drawCells();
+
+    console.log("Game started at real location:", lat, lng);
+  },
+  (err) => {
+    console.warn("Could not get GPS for initial position:", err);
+    console.log("Using WORLD_ORIGIN instead.");
+  },
+  { enableHighAccuracy: true, timeout: 7000 },
+);
+
 const gridState = {
   visibleCells: [] as L.Rectangle[],
   heldSpirit: null as number | null,
 };
 const cellMemory = new Map<string, CellMemento>();
+let movementController: MovementController = new ButtonMovementController();
+
+// ---- Movement Toggle Button -------------------------------------
+
+const movementToggle = document.createElement("button");
+movementToggle.id = "movementToggle";
+movementToggle.textContent = "Switch to Geo Movement";
+
+movementToggle.addEventListener("click", () => {
+  if (movementController instanceof ButtonMovementController) {
+    movementToggle.textContent = "Switch to Button Movement";
+    setMovementController(new GeoMovementController());
+    showFeedback("🛰️ Switched to GEO movement");
+  } else {
+    movementToggle.textContent = "Switch to Geo Movement";
+    setMovementController(new ButtonMovementController());
+    showFeedback("⌨️ Switched to BUTTON movement");
+  }
+});
 
 // ---- UI Setup ---------------------------------------------------
 
@@ -38,8 +176,12 @@ const mapDiv = createDiv("map");
 const statusPanel = createDiv("statusPanel");
 const feedbackPanel = createDiv("feedbackPanel");
 const winOverlay = createWinOverlay();
+const uiContainer = document.createElement("div");
+uiContainer.id = "uiContainer";
+uiContainer.append(statusPanel, feedbackPanel, movementToggle);
 
-document.body.append(mapDiv, statusPanel, feedbackPanel, winOverlay);
+document.body.append(uiContainer);
+document.body.append(mapDiv, uiContainer, winOverlay);
 
 // ---- Map Setup --------------------------------------------------
 
@@ -135,6 +277,25 @@ function centerPlayerOnGrid(lat: number, lng: number): L.LatLng {
   const i = Math.floor(lat / CELL_SIZE_DEG);
   const j = Math.floor(lng / CELL_SIZE_DEG);
   return L.latLng((i + 0.5) * CELL_SIZE_DEG, (j + 0.5) * CELL_SIZE_DEG);
+}
+
+function setMovementController(newController: MovementController) {
+  movementController.stop(); // stop current controller
+  movementController = newController;
+  movementController.onMove(handleMoveEvent);
+  movementController.start();
+}
+
+function handleMoveEvent(lat: number, lng: number) {
+  playerPos = centerPlayerOnGrid(lat, lng);
+  playerMarker.setLatLng(playerPos);
+
+  showFeedback(
+    `Moved to (${lat.toFixed(TEXT_DECIMALS)}, ${lng.toFixed(TEXT_DECIMALS)}).`,
+  );
+
+  drawCells();
+  map.panTo(playerPos);
 }
 
 // ---- UI / State Helpers -----------------------------------------
@@ -282,28 +443,8 @@ function drawCells() {
 
 // ---- Player Movement --------------------------------------------
 
-document.addEventListener("keydown", (e) => {
-  const key = e.key.toLowerCase();
-  if (!["w", "a", "s", "d"].includes(key)) return;
-  movePlayer(
-    key === "d" ? 1 : key === "a" ? -1 : 0,
-    key === "w" ? 1 : key === "s" ? -1 : 0,
-  );
-});
-
-function movePlayer(dx: number, dy: number) {
-  const newLat = playerPos.lat + dy * CELL_SIZE_DEG;
-  const newLng = playerPos.lng + dx * CELL_SIZE_DEG;
-  playerPos = centerPlayerOnGrid(newLat, newLng);
-  playerMarker.setLatLng(playerPos);
-  showFeedback(
-    `Dreamwalker moved to (${newLat.toFixed(TEXT_DECIMALS)}, ${
-      newLng.toFixed(TEXT_DECIMALS)
-    }).`,
-  );
-  drawCells();
-  map.panTo(playerPos);
-}
+movementController.onMove(handleMoveEvent);
+movementController.start();
 
 // ---- Initialize -------------------------------------------------
 

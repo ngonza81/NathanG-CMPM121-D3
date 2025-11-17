@@ -21,7 +21,7 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 **Key technical challenge:** Can you assemble a map-based user interface using the Leaflet mapping framework?**
 **Key gameplay challenge:** Can players collect and craft tokens from nearby locations to finally make one of sufficiently high value?
 
-### Steps
+### Steps(3a)
 
 #### Map
 
@@ -102,3 +102,24 @@ The goal: merge until a powerful spirit (e.g., value 16 or 32) awakens, symboliz
 
 - [x] Modified cells retain their state even after scrolling off the map.
 - [x] Unmodified cells remain procedural (memoryless) until interacted with.
+
+## D3.d: Gameplay Across Real-world Space and Time
+
+**Key technical challenge:** Can your software remember game state even when the page is closed? Is the player character’s in-game movement controlled by the real-world geolocation of their device?
+**Key gameplay challenge:** Can the user test the game with multiple gameplay sessions, some involving real-world movement and some involving simulated movement?
+
+### Steps(3d)
+
+#### Geolocation Movement
+
+- [x] Create a `MovementController` interface.
+- [x] Implement `ButtonMovementController`.
+- [x] Implement `GeoMovementController`.
+- [x] Player position updates using real-world movement.
+
+#### Game State
+
+- [] Save full game state to localStorage
+- [] Restore game state on page load
+- [] Auto-save after every meaningful action
+- [] Add “New Game” button
