@@ -178,8 +178,15 @@ newGameButton.textContent = "New Game";
 document.body.append(newGameButton);
 
 newGameButton.addEventListener("click", () => {
-  localStorage.removeItem(SAVE_KEY);
-  location.reload();
+  winOverlay.innerHTML = "<h1>🌙 A new dream begins...</h1>";
+  winOverlay.style.display = "block";
+
+  requestAnimationFrame(() => winOverlay.classList.add("show"));
+
+  setTimeout(() => {
+    localStorage.removeItem(SAVE_KEY);
+    location.reload();
+  }, 2000);
 });
 
 // ---- UI Setup ---------------------------------------------------
@@ -309,6 +316,24 @@ function handleMoveEvent(lat: number, lng: number) {
   drawCells();
   map.panTo(playerPos);
   saveGame();
+}
+
+function getRealWorldStartingPosition(): Promise<L.LatLng> {
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        resolve(centerPlayerOnGrid(pos.coords.latitude, pos.coords.longitude));
+      },
+      () => {
+        // fallback
+        resolve(centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng));
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 5000,
+      },
+    );
+  });
 }
 
 // ---- UI / State Helpers -----------------------------------------
@@ -458,13 +483,19 @@ function triggerVictory() {
   setTimeout(() => resetGame(), RESET_DELAY);
 }
 
-function resetGame() {
+async function resetGame() {
+  cellMemory.clear();
+  updateStatusPanel();
+  localStorage.removeItem("dream_state");
+  const startPos = await getRealWorldStartingPosition();
+  playerPos = startPos;
+  playerMarker.setLatLng(startPos);
+  map.panTo(startPos);
   gridState.heldSpirit = null;
   updateStatusPanel();
   winOverlay.classList.remove("show");
   winOverlay.style.display = "none";
   map.dragging.enable();
-  cellMemory.clear();
   drawCells();
 }
 
@@ -528,7 +559,6 @@ map.on("moveend", drawCells);
 
 const loaded = loadGame();
 if (!loaded) {
-  playerPos = centerPlayerOnGrid(WORLD_ORIGIN.lat, WORLD_ORIGIN.lng);
   playerMarker.setLatLng(playerPos);
   map.panTo(playerPos);
 }
